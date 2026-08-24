@@ -1,0 +1,216 @@
+Enum "booking_source_enum" {
+  "website"
+  "mobile_app"
+  "call_center"
+  "walk_in"
+}
+
+Enum "booking_status_enum" {
+  "pending"
+  "confirmed"
+  "ongoing"
+  "cancelled"
+  "completed"
+}
+
+Enum "customer_document_type_enum" {
+  "ktp-penyewa"
+  "ktp-penjamin"
+  "sim"
+  "passport"
+  "tiket"
+  "npwp"
+}
+
+Enum "fuel_type_enum" {
+  "gasoline"
+  "diesel"
+  "electric"
+  "hybrid"
+}
+
+Enum "transmission_type_enum" {
+  "manual"
+  "automatic"
+}
+
+Enum "vehicle_status_enum" {
+  "available"
+  "booked"
+  "maintenance"
+  "inactive"
+}
+
+Enum "verification_status_enum" {
+  "pending"
+  "verified"
+  "rejected"
+}
+
+Table "schema_migrations" {
+  "version" int8 [pk, not null]
+  "dirty" bool [not null]
+}
+
+Table "roles" {
+  "id" uuid [pk, not null, default: `gen_random_uuid()`]
+  "name" varchar(100) [unique, not null, check: `char_length(TRIM(BOTH FROM name)) > 0`]
+  "description" text
+}
+
+Table "users" {
+  "id" uuid [pk, not null, default: `gen_random_uuid()`]
+  "role_id" uuid [not null]
+  "full_name" varchar(255) [not null, check: `char_length(TRIM(BOTH FROM full_name)) >= 3`]
+  "email" varchar(255) [unique, not null, check: `POSITION(('@'::text) IN (email)) > 1`]
+  "phone" varchar(20) [check: `(phone IS NULL) OR ((char_length((phone)::text) >= 10) AND (char_length((phone)::text) <= 20))`]
+  "password_hash" text [not null, check: `char_length(password_hash) > 20`]
+  "is_active" bool [not null, default: true]
+  "last_login_at" timestamptz
+  "created_at" timestamptz [default: `now()`]
+  "updated_at" timestamptz [default: `now()`]
+  "deleted_at" timestamptz
+}
+
+Table "customers" {
+  "id" uuid [pk, not null, default: `gen_random_uuid()`]
+  "full_name" varchar(255) [not null, check: `char_length(TRIM(BOTH FROM full_name)) >= 3`]
+  "email" varchar(255) [unique, check: `POSITION(('@'::text) IN (email)) > 1`]
+  "phone" varchar(20) [not null, check: `(phone)::text ~ '^[0-9+]+$'::text`]
+  "nik" varchar(50) [unique, not null, check: `(nik)::text ~ '^[0-9]{16}$'::text`]
+  "address" text
+  "date_of_birth" date
+  "verification_status" verification_status_enum [not null, default: 'pending']
+  "created_at" timestamptz [default: `now()`]
+  "updated_at" timestamptz [default: `now()`]
+  "deleted_at" timestamptz
+}
+
+Table "customer_documents" {
+  "id" uuid [pk, not null, default: `gen_random_uuid()`]
+  "customer_id" uuid [not null]
+  "document_type" customer_document_type_enum [not null]
+  "file_url" text [not null, check: `char_length(TRIM(BOTH FROM file_url)) > 0`]
+  "verified_by" uuid
+  "verified_at" timestamptz
+  "uploaded_at" timestamptz [default: `now()`]
+
+  Indexes {
+    (customer_id, document_type) [type: btree, unique, name: "customer_documents_customer_id_document_type_key"]
+  }
+}
+
+Table "vehicle_categories" {
+  "id" uuid [pk, not null, default: `gen_random_uuid()`]
+  "name" varchar(100) [unique, not null, check: `char_length(TRIM(BOTH FROM name)) > 0`]
+  "description" text
+}
+
+Table "vehicles" {
+  "id" uuid [pk, not null, default: `gen_random_uuid()`]
+  "category_id" uuid [not null]
+  "name" varchar(255) [not null]
+  "brand" varchar(100) [not null]
+  "model" varchar(100) [not null]
+  "year" int2 [not null, check: `(year >= 1900) AND ((year)::numeric <= (EXTRACT(year FROM now()) + (1)::numeric))`]
+  "transmission" transmission_type_enum [not null]
+  "fuel_type" fuel_type_enum [not null]
+  "seat_capacity" int4 [check: `seat_capacity > 0`]
+  "luggage_capacity" int4 [check: `luggage_capacity >= 0`]
+  "plate_number" varchar(50) [unique, not null, check: `char_length(TRIM(BOTH FROM plate_number)) >= 3`]
+  "daily_price" numeric(12,2) [not null, check: `daily_price >= (0)::numeric`]
+  "status" vehicle_status_enum [not null, default: 'available']
+  "description" text
+  "created_at" timestamptz [default: `now()`]
+  "updated_at" timestamptz [default: `now()`]
+  "deleted_at" timestamptz
+}
+
+Table "vehicle_images" {
+  "id" uuid [pk, not null, default: `gen_random_uuid()`]
+  "vehicle_id" uuid [not null]
+  "image_url" text [not null, check: `char_length(TRIM(BOTH FROM image_url)) > 0`]
+  "is_thumbnail" bool [default: false]
+  "uploaded_at" timestamptz [default: `now()`]
+}
+
+Table "bookings" {
+  "id" uuid [pk, not null, default: `gen_random_uuid()`]
+  "customer_id" uuid [not null]
+  "created_by_user" uuid
+  "booking_code" varchar(100) [unique, not null, check: `char_length(TRIM(BOTH FROM booking_code)) > 0`]
+  "booking_source" booking_source_enum [not null, default: 'website']
+  "pickup_location" text [not null]
+  "return_location" text [not null]
+  "start_date" date [not null]
+  "end_date" date [not null]
+  "pickup_time" time
+  "return_time" time
+  "booking_status" booking_status_enum [not null, default: 'pending']
+  "subtotal" numeric(12,2) [not null, check: `subtotal >= (0)::numeric`, default: 0]
+  "total_amount" numeric(12,2) [not null, check: `total_amount >= (0)::numeric`, default: 0]
+  "notes" text
+  "created_at" timestamptz [default: `now()`]
+  "updated_at" timestamptz [default: `now()`]
+
+  Checks {
+    `end_date >= start_date` [name: 'bookings_check']
+  }
+}
+
+Table "booking_items" {
+  "id" uuid [pk, not null, default: `gen_random_uuid()`]
+  "booking_id" uuid [not null]
+  "vehicle_id" uuid [not null]
+  "price_per_day" numeric(12,2) [not null, check: `price_per_day >= (0)::numeric`]
+  "total_days" int4 [not null, check: `total_days > 0`]
+  "subtotal" numeric(12,2) [not null, check: `subtotal >= (0)::numeric`]
+
+  Indexes {
+    (booking_id, vehicle_id) [type: btree, unique, name: "booking_items_booking_id_vehicle_id_key"]
+  }
+}
+
+Table "booking_status_histories" {
+  "id" uuid [pk, not null, default: `gen_random_uuid()`]
+  "booking_id" uuid [not null]
+  "changed_by" uuid
+  "status" booking_status_enum [not null]
+  "notes" text
+  "created_at" timestamptz [default: `now()`]
+}
+
+Table "audit_logs" {
+  "id" uuid [pk, not null, default: `gen_random_uuid()`]
+  "user_id" uuid
+  "action" varchar(100) [not null]
+  "entity_type" varchar(100) [not null]
+  "entity_id" uuid [not null]
+  "old_value" jsonb
+  "new_value" jsonb
+  "created_at" timestamptz [default: `now()`]
+}
+
+Ref "audit_logs_user_id_fkey":"users"."id" < "audit_logs"."user_id" [delete: set null]
+
+Ref "booking_items_booking_id_fkey":"bookings"."id" < "booking_items"."booking_id" [delete: cascade]
+
+Ref "booking_items_vehicle_id_fkey":"vehicles"."id" < "booking_items"."vehicle_id" [delete: restrict]
+
+Ref "booking_status_histories_booking_id_fkey":"bookings"."id" < "booking_status_histories"."booking_id" [delete: cascade]
+
+Ref "booking_status_histories_changed_by_fkey":"users"."id" < "booking_status_histories"."changed_by" [delete: set null]
+
+Ref "bookings_created_by_user_fkey":"users"."id" < "bookings"."created_by_user" [delete: set null]
+
+Ref "bookings_customer_id_fkey":"customers"."id" < "bookings"."customer_id" [delete: restrict]
+
+Ref "customer_documents_customer_id_fkey":"customers"."id" < "customer_documents"."customer_id" [delete: cascade]
+
+Ref "customer_documents_verified_by_fkey":"users"."id" < "customer_documents"."verified_by" [delete: set null]
+
+Ref "users_role_id_fkey":"roles"."id" < "users"."role_id" [delete: restrict]
+
+Ref "vehicle_images_vehicle_id_fkey":"vehicles"."id" < "vehicle_images"."vehicle_id" [delete: cascade]
+
+Ref "vehicles_category_id_fkey":"vehicle_categories"."id" < "vehicles"."category_id" [delete: restrict]

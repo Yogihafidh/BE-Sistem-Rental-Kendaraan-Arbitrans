@@ -1,0 +1,1 @@
+-- auth queries are kept in users.sql so sqlc can avoid duplicate query names.

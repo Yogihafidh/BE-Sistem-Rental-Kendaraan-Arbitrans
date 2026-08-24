@@ -1,0 +1,1 @@
+-- payment tables are not present in current schema yet.
