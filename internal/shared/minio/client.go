@@ -1,51 +1,60 @@
-package storage
+package minio
 
 import (
-	"log"
+	"context"
+	"fmt"
+	"strings"
 
-	// Library MinIO client
-	"github.com/minio/minio-go/v7"
-
-	// Package credentials untuk autentikasi MinIO
+	"github.com/Yogihafidh/BE-Sistem-Rental-Kendaraan-Arbitrans/configs"
+	miniosdk "github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 )
 
-type MinioClient struct {
-	Client *minio.Client // Object client MinIO utama
-	Bucket string        // Nama bucket default yang akan dipakai aplikasi
+// Client wraps the MinIO client SDK and default bucket.
+type Client struct {
+	SDK    *miniosdk.Client
+	Bucket string
 }
 
-func NewMinioClient() *MinioClient {
-	// Endpoint MinIO Karena MinIO berjalan di Docker lokal pada port 9000
-	endpoint := "localhost:9000"
+// NewClient initializes a MinIO client using the centralized MinIOConfig.
+// It returns an error if client initialization fails instead of terminating the process.
+func NewClient(cfg configs.MinIOConfig) (*Client, error) {
+	endpoint := strings.TrimSpace(cfg.Endpoint)
+	if endpoint == "" {
+		return nil, fmt.Errorf("minio endpoint is empty")
+	}
 
-	// Username MinIO
-	accessKey := "admin"
-
-	// Password MinIO
-	secretKey := "password123"
-
-	// Membuat koneksi client MinIO
-	client, err := minio.New(endpoint, &minio.Options{
-		// Konfigurasi credentials login
+	client, err := miniosdk.New(endpoint, &miniosdk.Options{
 		Creds: credentials.NewStaticV4(
-			accessKey,
-			secretKey,
+			cfg.AccessKey,
+			cfg.SecretKey,
 			"",
 		),
-
-		// false artinya tidak menggunakan HTTPS karena local development
-		Secure: false,
+		Secure: cfg.UseSSL,
 	})
-
-	// Jika gagal koneksi ke MinIO
 	if err != nil {
-		log.Fatal(err)
+		return nil, fmt.Errorf("failed to create minio client: %w", err)
 	}
 
-	// Return object MinioClient dengan koneksi client yang sudah dibuat dan bucket default
-	return &MinioClient{
-		Client: client,
-		Bucket: "vehicle-rental",
+	return &Client{
+		SDK:    client,
+		Bucket: cfg.Bucket,
+	}, nil
+}
+
+// EnsureBucket verifies that the configured bucket exists, and creates it if it does not.
+func (c *Client) EnsureBucket(ctx context.Context) error {
+	exists, err := c.SDK.BucketExists(ctx, c.Bucket)
+	if err != nil {
+		return fmt.Errorf("failed to check minio bucket existence: %w", err)
 	}
+
+	if !exists {
+		err = c.SDK.MakeBucket(ctx, c.Bucket, miniosdk.MakeBucketOptions{})
+		if err != nil {
+			return fmt.Errorf("failed to create minio bucket '%s': %w", c.Bucket, err)
+		}
+	}
+
+	return nil
 }

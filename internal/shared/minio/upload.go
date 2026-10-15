@@ -1,39 +1,36 @@
-package storage
+package minio
 
 import (
 	"context"
+	"fmt"
 	"mime/multipart"
 
-	"github.com/google/uuid"       // Library untuk generate UUID random
-	"github.com/minio/minio-go/v7" // Library client MinIO
+	"github.com/google/uuid"
+	miniosdk "github.com/minio/minio-go/v7"
 )
 
-func (m *MinioClient) UploadFile(
+// UploadFile uploads a multipart file to MinIO with a unique UUID filename within the given folder.
+func (c *Client) UploadFile(
+	ctx context.Context,
 	file multipart.File,
 	header *multipart.FileHeader,
 	folder string,
 ) (string, error) {
+	objectName := fmt.Sprintf("%s/%s-%s", folder, uuid.NewString(), header.Filename)
 
-	// Membuat nama object/file yang unik dengan format: folder/uuid-random-nama-file-asli
-	objectName := folder + "/" + uuid.NewString() + "-" + header.Filename
-
-	// Upload file ke MinIO bucket dengan nama object yang sudah dibuat
-	_, err := m.Client.PutObject(
-		context.Background(),
-		m.Bucket,
+	_, err := c.SDK.PutObject(
+		ctx,
+		c.Bucket,
 		objectName,
 		file,
 		header.Size,
-		minio.PutObjectOptions{
+		miniosdk.PutObjectOptions{
 			ContentType: header.Header.Get("Content-Type"),
 		},
 	)
-
-	// Jika upload gagal
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to upload object to minio: %w", err)
 	}
 
-	// Return nama/path object file
 	return objectName, nil
 }

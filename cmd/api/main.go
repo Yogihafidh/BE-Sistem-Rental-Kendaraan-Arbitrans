@@ -2,13 +2,25 @@ package main
 
 import (
 	"context"
-	"log"
+	"errors"
+	"fmt"
+	"log/slog"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
 
-	"github.com/joho/godotenv"
-
+	"github.com/Yogihafidh/BE-Sistem-Rental-Kendaraan-Arbitrans/configs"
 	"github.com/Yogihafidh/BE-Sistem-Rental-Kendaraan-Arbitrans/database/sqlc"
 	"github.com/Yogihafidh/BE-Sistem-Rental-Kendaraan-Arbitrans/internal/shared/database"
+	sharedjwt "github.com/Yogihafidh/BE-Sistem-Rental-Kendaraan-Arbitrans/internal/shared/jwt"
+	"github.com/Yogihafidh/BE-Sistem-Rental-Kendaraan-Arbitrans/internal/shared/logger"
+	"github.com/Yogihafidh/BE-Sistem-Rental-Kendaraan-Arbitrans/internal/shared/middleware"
+	sharedminio "github.com/Yogihafidh/BE-Sistem-Rental-Kendaraan-Arbitrans/internal/shared/minio"
+	sharedredis "github.com/Yogihafidh/BE-Sistem-Rental-Kendaraan-Arbitrans/internal/shared/redis"
+	"github.com/Yogihafidh/BE-Sistem-Rental-Kendaraan-Arbitrans/internal/shared/response"
 	"github.com/gin-gonic/gin"
+	goredis "github.com/redis/go-redis/v9"
 
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
@@ -22,36 +34,197 @@ import (
 // @host			localhost:8080
 // @BasePath		/api/v1
 func main() {
-	// 1. Load file .env ke environment variable aplikasi
-	err := godotenv.Load()
+	// 1. Centralized configuration loading and startup validation
+	cfg, err := configs.LoadConfig()
 	if err != nil {
-		log.Fatal("failed to load .env file")
+		fmt.Fprintf(os.Stderr, "FATAL: configuration failure: %v\n", err)
+		os.Exit(1)
 	}
 
-	// 2. Membuat context utama aplikasi
+	// 2. Initialize structured logging
+	appLogger := logger.NewLogger(cfg.App.Env)
+	appLogger.Info("Starting application",
+		slog.String("app", cfg.App.Name),
+		slog.String("env", cfg.App.Env),
+		slog.String("port", cfg.App.Port),
+	)
+
+	// 3. Initialize JWT authentication manager
+	sharedjwt.Init(cfg.JWT)
+
+	// 4. Create root context
 	ctx := context.Background()
 
-	// 3. Setup database connection pool
-	pool, err := database.NewPostgresPool(ctx)
+	// 5. Setup PostgreSQL connection pool (Mandatory Core Dependency)
+	pool, err := database.NewPostgresPool(ctx, cfg.DB)
 	if err != nil {
-		log.Fatalf("failed to connect database: %v", err)
+		appLogger.Error("Failed to initialize database connection pool", slog.String("error", err.Error()))
+		os.Exit(1)
+	}
+	defer pool.Close()
+	appLogger.Info("Database connection pool established successfully",
+		slog.Int("max_conns", int(cfg.DB.MaxConns)),
+		slog.Int("min_conns", int(cfg.DB.MinConns)),
+	)
+
+	// 6. Setup Redis Client (Optional Infrastructure Dependency)
+	var redisClient *goredis.Client
+	if cfg.Redis.Enabled && cfg.Redis.Addr != "" {
+		rc, err := sharedredis.NewClient(ctx, cfg.Redis)
+		if err != nil {
+			appLogger.Warn("Redis connection failed; continuing without cache",
+				slog.String("addr", cfg.Redis.Addr),
+				slog.String("error", err.Error()),
+			)
+		} else {
+			redisClient = rc
+			defer redisClient.Close()
+			appLogger.Info("Redis connection established", slog.String("addr", cfg.Redis.Addr))
+		}
 	}
 
-	// 4. Menutup semua koneksi database saat aplikasi shutdown
-	defer pool.Close()
+	// 7. Setup MinIO Client (Optional/On-Demand Storage Dependency)
+	var minioClient *sharedminio.Client
+	if cfg.MinIO.Endpoint != "" {
+		mc, err := sharedminio.NewClient(cfg.MinIO)
+		if err != nil {
+			appLogger.Warn("MinIO client initialization failed", slog.String("error", err.Error()))
+		} else {
+			minioClient = mc
+			appLogger.Info("MinIO client configured",
+				slog.String("endpoint", cfg.MinIO.Endpoint),
+				slog.String("bucket", cfg.MinIO.Bucket),
+			)
+		}
+	}
 
-	// 5. Create a Gin router with default middleware (logger and recovery)
-	r := gin.Default()
+	// 8. Instantiate SQLC query repository (Ready for module dependency injection)
+	queries := sqlc.New(pool)
+	_ = queries
+	_ = minioClient
+	_ = redisClient
 
-	// 6. Setup prefix endpoint API /api/v1
-	api := r.Group("/api/v1")
+	// 9. Setup Gin HTTP engine
+	if cfg.App.IsProduction() {
+		gin.SetMode(gin.ReleaseMode)
+	} else {
+		gin.SetMode(gin.DebugMode)
+	}
 
-	// 7. Register Swagger UI route
+	r := gin.New()
+
+	// 10. Register foundational middlewares in correct order:
+	// CORS first (so all responses, errors, and preflights get CORS headers)
+	// RequestLogger second (traces all incoming and completed requests)
+	// Recovery third (catches panics and returns structured 500 error)
+	// BodySizeLimit fourth (prevents oversized payload memory exhaustion)
+	r.Use(middleware.CORS(cfg.CORS))
+	r.Use(middleware.RequestLogger(appLogger))
+	r.Use(middleware.Recovery(appLogger))
+	r.Use(middleware.BodySizeLimit(10 << 20)) // 10 MB maximum request payload
+
+	// 11. Health check endpoint (Accurate multi-component reporting)
+	r.GET("/health", func(c *gin.Context) {
+		pingCtx, cancel := context.WithTimeout(c.Request.Context(), cfg.App.ReadTimeout)
+		defer cancel()
+
+		dbHealthy := true
+		dbStatus := "healthy"
+		if pingErr := pool.Ping(pingCtx); pingErr != nil {
+			dbHealthy = false
+			dbStatus = "unreachable: " + pingErr.Error()
+		}
+
+		redisStatus := "disabled"
+		redisHealthy := true
+		if redisClient != nil {
+			if rPingErr := redisClient.Ping(pingCtx).Err(); rPingErr != nil {
+				redisHealthy = false
+				redisStatus = "unreachable: " + rPingErr.Error()
+			} else {
+				redisStatus = "healthy"
+			}
+		}
+
+		minioStatus := "not_configured"
+		if minioClient != nil {
+			minioStatus = "configured"
+		}
+
+		// If core database is down, system is DOWN (503 Service Unavailable)
+		if !dbHealthy {
+			response.Error(c, http.StatusServiceUnavailable, "Database is unreachable", gin.H{
+				"status":   "DOWN",
+				"database": dbStatus,
+				"redis":    redisStatus,
+				"minio":    minioStatus,
+				"env":      cfg.App.Env,
+			})
+			return
+		}
+
+		// If optional dependencies are degraded
+		overallStatus := "UP"
+		if !redisHealthy {
+			overallStatus = "DEGRADED"
+		}
+
+		response.Success(c, http.StatusOK, "System operational", gin.H{
+			"status":   overallStatus,
+			"database": dbStatus,
+			"redis":    redisStatus,
+			"minio":    minioStatus,
+			"env":      cfg.App.Env,
+		})
+	})
+
+	// 12. Register Swagger UI route
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
-	// 8. Setup semua module
-	queries := sqlc.New(pool)
+	// 13. API v1 group
+	api := r.Group("/api/v1")
+	{
+		api.GET("/ping", func(c *gin.Context) {
+			response.Success(c, http.StatusOK, "pong", nil)
+		})
 
-	// 9. Start server on port 8080 (default)
-	r.Run()
+		// Business modules will attach their routes to api group here
+	}
+
+	// 14. Configure HTTP server with timeouts
+	serverAddr := fmt.Sprintf(":%s", cfg.App.Port)
+	srv := &http.Server{
+		Addr:         serverAddr,
+		Handler:      r,
+		ReadTimeout:  cfg.App.ReadTimeout,
+		WriteTimeout: cfg.App.WriteTimeout,
+		IdleTimeout:  cfg.App.IdleTimeout,
+	}
+
+	// 15. Start HTTP server in a separate goroutine
+	go func() {
+		appLogger.Info("HTTP server listening", slog.String("addr", serverAddr))
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			appLogger.Error("HTTP server failed", slog.String("error", err.Error()))
+			os.Exit(1)
+		}
+	}()
+
+	// 16. Graceful application shutdown listening for OS signals
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	sig := <-quit
+
+	appLogger.Info("Shutdown signal received, shutting down gracefully...", slog.String("signal", sig.String()))
+
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), cfg.App.ShutdownTimeout)
+	defer shutdownCancel()
+
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		appLogger.Error("Server forced to shutdown", slog.String("error", err.Error()))
+	} else {
+		appLogger.Info("HTTP server stopped gracefully")
+	}
+
+	appLogger.Info("Application shutdown completed")
 }

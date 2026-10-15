@@ -1,31 +1,35 @@
-package storage
+package minio
 
 import (
 	"context"
+	"fmt"
 	"net/url"
 	"time"
 )
 
-func (m *MinioClient) GetPresignedURL(
+// GetPresignedURL generates a temporary presigned URL for reading an object.
+// If expiry is <= 0, a default of 15 minutes is applied.
+func (c *Client) GetPresignedURL(
+	ctx context.Context,
 	objectName string,
+	expiry time.Duration,
 ) (string, error) {
-	// Membuat query parameter kosong untuk presigned URL
-	reqParams := make(url.Values)
-
-	// Membuat temporary signed URL untuk akses file object di MinIO dengan masa berlaku 15 menit
-	presignedURL, err := m.Client.PresignedGetObject(
-		context.Background(),
-		m.Bucket,
-		objectName,
-		time.Minute*15,
-		reqParams,
-	)
-
-	// Jika gagal generate URL
-	if err != nil {
-		return "", err
+	if expiry <= 0 {
+		expiry = 15 * time.Minute
 	}
 
-	// Convert URL object menjadi string
+	reqParams := make(url.Values)
+
+	presignedURL, err := c.SDK.PresignedGetObject(
+		ctx,
+		c.Bucket,
+		objectName,
+		expiry,
+		reqParams,
+	)
+	if err != nil {
+		return "", fmt.Errorf("failed to generate presigned url for '%s': %w", objectName, err)
+	}
+
 	return presignedURL.String(), nil
 }
