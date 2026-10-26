@@ -137,4 +137,17 @@ func TestDatabaseConfig_GetDSN(t *testing.T) {
 	if dbWithParams.GetDSN() != expected {
 		t.Errorf("expected '%s', got '%s'", expected, dbWithParams.GetDSN())
 	}
+
+	dbWithSpecialChars := DatabaseConfig{
+		Host:     "127.0.0.1",
+		Port:     5432,
+		User:     "myuser",
+		Password: "p@ss:word!#",
+		Name:     "rental",
+		SSLMode:  "disable",
+	}
+	expectedSpecial := "postgres://myuser:p%40ss%3Aword%21%23@127.0.0.1:5432/rental?sslmode=disable"
+	if dbWithSpecialChars.GetDSN() != expectedSpecial {
+		t.Errorf("expected '%s', got '%s'", expectedSpecial, dbWithSpecialChars.GetDSN())
+	}
 }

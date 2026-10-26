@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"mime/multipart"
+	"path/filepath"
+	"strings"
 
 	"github.com/google/uuid"
 	miniosdk "github.com/minio/minio-go/v7"
@@ -16,7 +18,15 @@ func (c *Client) UploadFile(
 	header *multipart.FileHeader,
 	folder string,
 ) (string, error) {
-	objectName := fmt.Sprintf("%s/%s-%s", folder, uuid.NewString(), header.Filename)
+	// Sanitize filename to prevent directory traversal
+	cleanFilename := filepath.Base(header.Filename)
+	// Remove leading and trailing slashes from folder
+	cleanFolder := strings.Trim(filepath.ToSlash(folder), "/")
+
+	objectName := fmt.Sprintf("%s/%s-%s", cleanFolder, uuid.NewString(), cleanFilename)
+	if cleanFolder == "" {
+		objectName = fmt.Sprintf("%s-%s", uuid.NewString(), cleanFilename)
+	}
 
 	_, err := c.SDK.PutObject(
 		ctx,

@@ -5,26 +5,11 @@ info:
   description: Backend API for vehicle rental system
   title: Arbitrans API
   version: "1.0"
-paths:
-  /roles:
-    get:
-      consumes:
-      - application/json
-      description: Get all roles data
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get all roles
-      tags:
-      - Roles
+paths: {}
+securityDefinitions:
+  BearerAuth:
+    description: Type "Bearer" followed by a space and JWT token.
+    in: header
+    name: Authorization
+    type: apiKey
 swagger: "2.0"

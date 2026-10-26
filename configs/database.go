@@ -2,6 +2,7 @@ package configs
 
 import (
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -23,7 +24,7 @@ type DatabaseConfig struct {
 }
 
 // GetDSN returns the connection string. If URL is provided, it is returned.
-// Otherwise, it constructs a PostgreSQL connection string from discrete parameters.
+// Otherwise, it constructs a PostgreSQL connection string from discrete parameters with proper URL encoding.
 func (d DatabaseConfig) GetDSN() string {
 	if strings.TrimSpace(d.URL) != "" {
 		return strings.TrimSpace(d.URL)
@@ -34,13 +35,16 @@ func (d DatabaseConfig) GetDSN() string {
 		sslMode = "disable"
 	}
 
-	return fmt.Sprintf(
-		"postgres://%s:%s@%s:%d/%s?sslmode=%s",
-		d.User,
-		d.Password,
-		d.Host,
-		d.Port,
-		d.Name,
-		sslMode,
-	)
+	u := &url.URL{
+		Scheme: "postgres",
+		User:   url.UserPassword(d.User, d.Password),
+		Host:   fmt.Sprintf("%s:%d", d.Host, d.Port),
+		Path:   "/" + d.Name,
+	}
+
+	q := u.Query()
+	q.Set("sslmode", sslMode)
+	u.RawQuery = q.Encode()
+
+	return u.String()
 }

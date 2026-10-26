@@ -11,7 +11,7 @@ import (
 	"github.com/joho/godotenv"
 )
 
-// Config aggregates all application configuration modules.
+// set struct config all application configuration modules.
 type Config struct {
 	App   AppConfig
 	DB    DatabaseConfig
@@ -21,23 +21,23 @@ type Config struct {
 	CORS  CORSConfig
 }
 
-// LoadConfig loads configuration from environment variables and an optional .env file.
-// If the .env file does not exist (e.g., in production or container environments),
-// it gracefully continues loading from system environment variables.
+// Load config from environment variables and an optional .env file
 func LoadConfig(filenames ...string) (*Config, error) {
-	// Attempt to load .env file if available
+	// 1. Try to load .env file if filename is given.
 	if len(filenames) > 0 {
 		_ = godotenv.Load(filenames...)
 	} else {
-		// Look for standard .env file; ignore if missing
+		// if no filename is given, check for .env file.
 		if _, err := os.Stat(".env"); err == nil {
 			_ = godotenv.Load(".env")
 		}
 	}
 
+	// 2. Get APP_ENV from environment. If not found, use "development".
 	appEnv := strings.ToLower(getEnv("APP_ENV", "development"))
 	appPort := getEnv("APP_PORT", "8080")
 
+	// 3. Form a Config object with all configurations.
 	cfg := &Config{
 		App: AppConfig{
 			Name:            getEnv("APP_NAME", "Arbitrans Vehicle Rental API"),
@@ -94,31 +94,33 @@ func LoadConfig(filenames ...string) (*Config, error) {
 		},
 	}
 
+	// 4. Validate configuration
 	if err := cfg.Validate(); err != nil {
 		return nil, fmt.Errorf("configuration validation error: %w", err)
 	}
 
+	// 5. Return the configuration object
 	return cfg, nil
 }
 
-// Validate verifies that required configuration values are valid and secure.
+// Validate dengan memeriksa apakah konfigurasi aplikasi memenuhi aturan yang ditetapkan.
 func (c *Config) Validate() error {
 	var errs []string
 
-	// Validate App Environment
+	// 1. Validate App Environment
 	switch c.App.Env {
 	case "development", "staging", "production", "test":
 	default:
 		errs = append(errs, fmt.Sprintf("invalid APP_ENV '%s': must be development, staging, production, or test", c.App.Env))
 	}
 
-	// Validate Port
+	// 2. Validate Port
 	portNum, err := strconv.Atoi(c.App.Port)
 	if err != nil || portNum < 1 || portNum > 65535 {
 		errs = append(errs, fmt.Sprintf("invalid APP_PORT '%s': must be a valid port number (1-65535)", c.App.Port))
 	}
 
-	// Validate Database Config
+	// 3. Validate Database Config
 	if strings.TrimSpace(c.DB.URL) == "" {
 		if strings.TrimSpace(c.DB.Host) == "" {
 			errs = append(errs, "database configuration required: DB_HOST or DATABASE_URL must be specified")
@@ -137,7 +139,7 @@ func (c *Config) Validate() error {
 		errs = append(errs, "DB_MIN_CONNS must be non-negative and less than or equal to DB_MAX_CONNS")
 	}
 
-	// Validate JWT Config
+	// 4. Validate JWT Config
 	if strings.TrimSpace(c.JWT.Secret) == "" {
 		errs = append(errs, "JWT_SECRET is required and cannot be empty")
 	} else if c.App.IsProduction() {
@@ -157,7 +159,7 @@ func (c *Config) Validate() error {
 		errs = append(errs, "JWT_EXPIRATION must be greater than 0")
 	}
 
-	// Validate MinIO
+	// 5. Validate MinIO
 	if strings.TrimSpace(c.MinIO.Endpoint) != "" {
 		if strings.TrimSpace(c.MinIO.Bucket) == "" {
 			errs = append(errs, "MINIO_BUCKET is required when MINIO_ENDPOINT is specified")
@@ -169,7 +171,7 @@ func (c *Config) Validate() error {
 		}
 	}
 
-	// Validate Redis
+	// 6. Validate Redis
 	if c.Redis.Enabled && strings.TrimSpace(c.Redis.Addr) != "" {
 		if c.Redis.PoolSize <= 0 {
 			errs = append(errs, "REDIS_POOL_SIZE must be greater than 0 when Redis is enabled")
@@ -179,7 +181,7 @@ func (c *Config) Validate() error {
 		}
 	}
 
-	// Validate CORS
+	// 7. Validate CORS
 	if c.CORS.AllowCredentials && c.App.IsProduction() {
 		for _, o := range c.CORS.AllowedOrigins {
 			if o == "*" {
@@ -189,9 +191,11 @@ func (c *Config) Validate() error {
 		}
 	}
 
+	// 8. Jika ada error yang ditemukan, kembalikan error.
 	if len(errs) > 0 {
 		return errors.New(strings.Join(errs, "; "))
 	}
 
+	// 9. Jika tidak ada error yang ditemukan, kembalikan nil.
 	return nil
 }
