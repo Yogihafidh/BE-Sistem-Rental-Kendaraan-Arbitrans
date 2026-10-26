@@ -119,6 +119,9 @@ To simplify daily engineering workflows across different operating systems witho
 | **Generate sqlc Code** | `.\scripts\dev.ps1 sqlc-generate` | `make sqlc-generate` | `sqlc generate` |
 | **Regenerate Swagger** | `.\scripts\dev.ps1 swag` | `make swag` | `swag init -g cmd/api/main.go -o docs` |
 | **Run Unit Tests** | `.\scripts\dev.ps1 test` | `make test` | `go test -v ./...` |
+| **Test with Race Detector** | `.\scripts\dev.ps1 test-race` | `make test-race` | `go test -v -race ./...` |
+| **Run Linter (with gosec)** | `.\scripts\dev.ps1 lint` | `make lint` | `golangci-lint run` |
+| **Vulnerability Audit** | `.\scripts\dev.ps1 vulncheck` | `make vulncheck` | `govulncheck ./...` |
 | **Format Code** | `.\scripts\dev.ps1 fmt` | `make fmt` | `go fmt ./...` |
 | **Static Analysis** | `.\scripts\dev.ps1 vet` | `make vet` | `go vet ./...` |
 | **Live Reload (Air)** | `.\scripts\dev.ps1 dev` | `make dev` | `air` |
@@ -131,6 +134,15 @@ To simplify daily engineering workflows across different operating systems witho
 ```bash
 # Run all unit tests
 go test -v ./...
+
+# Run unit tests with memory race detector (requires CGO)
+go test -v -race ./...
+
+# Run multi-linter and security checks
+golangci-lint run
+
+# Audit dependencies for known CVEs
+govulncheck ./...
 
 # Verify Go formatting
 go fmt ./...

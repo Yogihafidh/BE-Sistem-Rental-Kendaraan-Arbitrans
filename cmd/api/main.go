@@ -196,11 +196,9 @@ func main() {
 
 	// 13. API v1 group
 	api := r.Group("/api/v1")
-	{
-		api.GET("/ping", func(c *gin.Context) {
-			sharedResponse.Success(c, http.StatusOK, "pong", nil)
-		})
-	}
+	api.GET("/ping", func(c *gin.Context) {
+		sharedResponse.Success(c, http.StatusOK, "pong", nil)
+	})
 
 	// 14. Configure HTTP server with timeouts
 	serverAddr := fmt.Sprintf(":%s", cfg.App.Port)

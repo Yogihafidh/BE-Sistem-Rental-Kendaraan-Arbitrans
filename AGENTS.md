@@ -69,6 +69,8 @@ Execute commands from the repository root:
 | **Regenerate sqlc Code**| `sqlc generate` |
 | **Regenerate Swagger** | `swag init -g cmd/api/main.go -o docs` |
 | **Run Unit Tests** | `go test -v ./...` |
+| **Run Linter** | `golangci-lint run` |
+| **Audit Vulnerabilities** | `govulncheck ./...` |
 | **Format Code** | `go fmt ./...` |
 | **Static Analysis** | `go vet ./...` |
 | **Compile Project** | `go build ./...` |

@@ -23,7 +23,7 @@ func TestCORS_ExplicitOriginWithCredentials(t *testing.T) {
 	r.Use(CORS(cfg))
 	r.GET("/test", func(c *gin.Context) { c.String(http.StatusOK, "ok") })
 
-	req, _ := http.NewRequest(http.MethodGet, "/test", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/test", http.NoBody)
 	req.Header.Set("Origin", "https://arbitrans.com")
 
 	w := httptest.NewRecorder()
@@ -49,7 +49,7 @@ func TestCORS_WildcardWithoutCredentials(t *testing.T) {
 	r.Use(CORS(cfg))
 	r.GET("/test", func(c *gin.Context) { c.String(http.StatusOK, "ok") })
 
-	req, _ := http.NewRequest(http.MethodGet, "/test", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/test", http.NoBody)
 	req.Header.Set("Origin", "https://any-domain.com")
 
 	w := httptest.NewRecorder()
@@ -76,7 +76,7 @@ func TestCORS_WildcardWithCredentials_RejectsUntrustedOrigin(t *testing.T) {
 	r.Use(CORS(cfg))
 	r.GET("/test", func(c *gin.Context) { c.String(http.StatusOK, "ok") })
 
-	req, _ := http.NewRequest(http.MethodGet, "/test", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/test", http.NoBody)
 	req.Header.Set("Origin", "https://evil-attacker.com")
 
 	w := httptest.NewRecorder()
@@ -99,7 +99,7 @@ func TestCORS_PreflightOptions(t *testing.T) {
 	r.Use(CORS(cfg))
 	r.POST("/test", func(c *gin.Context) { c.String(http.StatusOK, "ok") })
 
-	req, _ := http.NewRequest(http.MethodOptions, "/test", nil)
+	req, _ := http.NewRequest(http.MethodOptions, "/test", http.NoBody)
 	req.Header.Set("Origin", "https://arbitrans.com")
 
 	w := httptest.NewRecorder()

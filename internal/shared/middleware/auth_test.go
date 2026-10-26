@@ -50,7 +50,7 @@ func TestAuthRequired_Success(t *testing.T) {
 	}
 	r, token := setupTestRouter(cfg)
 
-	req, _ := http.NewRequest(http.MethodGet, "/protected", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/protected", http.NoBody)
 	req.Header.Set("Authorization", "Bearer "+token)
 
 	w := httptest.NewRecorder()
@@ -68,7 +68,7 @@ func TestAuthRequired_MissingHeader(t *testing.T) {
 	}
 	r, _ := setupTestRouter(cfg)
 
-	req, _ := http.NewRequest(http.MethodGet, "/protected", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/protected", http.NoBody)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -85,7 +85,7 @@ func TestRequireRoles_Forbidden(t *testing.T) {
 	r, token := setupTestRouter(cfg)
 
 	// User role is 'admin', requesting '/operator-only'
-	req, _ := http.NewRequest(http.MethodGet, "/operator-only", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/operator-only", http.NoBody)
 	req.Header.Set("Authorization", "Bearer "+token)
 
 	w := httptest.NewRecorder()
@@ -104,7 +104,7 @@ func TestRequireRoles_Allowed(t *testing.T) {
 	r, token := setupTestRouter(cfg)
 
 	// User role is 'admin', requesting '/admin-only'
-	req, _ := http.NewRequest(http.MethodGet, "/admin-only", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/admin-only", http.NoBody)
 	req.Header.Set("Authorization", "Bearer "+token)
 
 	w := httptest.NewRecorder()

@@ -162,24 +162,45 @@ $$\text{Route} \longrightarrow \text{Handler} \longrightarrow \text{Service} \lo
 
 ---
 
-## 6. Testing and Completion Criteria
+## 6. Testing, Quality Assurance, and Completion Criteria
 
+### 6.1 Quality Assurance Toolchain
+| Tool | Purpose | Frequency / Scope |
+| :--- | :--- | :--- |
+| **`go fmt ./...`** | Official Go formatting | Pre-commit / All code |
+| **`go vet ./...`** | Suspicious construct detection | Pre-commit / All code |
+| **`golangci-lint run`** | Multi-linter quality, style, and security (includes `gosec`) | Pre-PR / CI pipeline |
+| **`go test -v ./...`** | Unit & integration test verification | Pre-commit / Modified packages |
+| **`govulncheck ./...`** | Symbol-level vulnerability scanning for dependencies | Dependency updates & CI |
+| **`go test -race ./...`**| Runtime memory race condition detection (requires CGO) | CI / Concurrency suites |
+
+### 6.2 Static Analysis vs. Concurrency Reality
+Static analysis tools (`go vet`, `golangci-lint`, `SonarQube`) cannot guarantee the absence of concurrency bugs, deadlocks, or business race conditions (e.g., double-booking vehicles). Concurrency safety must be enforced and tested across 3 distinct layers:
+1. **Database Row-Level Locking**: Use `SELECT ... FOR UPDATE` inside `sharedDatabase.WithTransaction`.
+2. **Database Integrity Constraints**: Leverage exclusion constraints (`EXCLUDE USING gist`) for schedule intervals.
+3. **Concurrent Integration Tests**: Write parallel test suites (`sync.WaitGroup` or `t.Parallel()`) simulating concurrent booking requests for the same vehicle to verify that only one succeeds and subsequent requests return `409 Conflict`.
+
+### 6.3 Task Completion Criteria
 A task is considered **complete** only when all of the following criteria are verified:
 
-1. **Unit Tests**:
+1. **Unit & Integration Tests**:
    - New or modified logic has corresponding unit tests (`*_test.go`).
    - All tests pass:
      ```bash
      go test -v ./...
      ```
-2. **Static Analysis & Formatting**:
-   - Code is formatted cleanly using the standard Go formatting command:
+2. **Static Analysis & Linting**:
+   - Code is formatted cleanly:
      ```bash
      go fmt ./...
      ```
    - Static analysis passes with zero warnings:
      ```bash
      go vet ./...
+     ```
+   - Linter checks pass cleanly:
+     ```bash
+     golangci-lint run
      ```
 3. **Compilation**:
    - Entire workspace compiles cleanly:

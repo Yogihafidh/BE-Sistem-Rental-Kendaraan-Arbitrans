@@ -1,4 +1,4 @@
-.PHONY: help up down migrate-up migrate-down migrate-version sqlc-compile sqlc-generate swag test fmt vet build dev
+.PHONY: help up down migrate-up migrate-down migrate-version sqlc-compile sqlc-generate swag test test-race lint vulncheck fmt vet build dev
 
 DATABASE_URL ?= postgres://postgres:postgres@localhost:5432/rental_db?sslmode=disable
 
@@ -13,6 +13,9 @@ help:
 	@echo "  make sqlc-generate    - Generate Go code with sqlc"
 	@echo "  make swag             - Regenerate Swagger documentation"
 	@echo "  make test             - Run all unit tests"
+	@echo "  make test-race        - Run unit tests with race detector"
+	@echo "  make lint             - Run golangci-lint (includes gosec)"
+	@echo "  make vulncheck        - Check dependencies with govulncheck"
 	@echo "  make fmt              - Format Go code"
 	@echo "  make vet              - Run go vet"
 	@echo "  make dev              - Run backend with live reload (Air)"
@@ -44,6 +47,15 @@ swag:
 
 test:
 	go test -v ./...
+
+test-race:
+	go test -v -race ./...
+
+lint:
+	golangci-lint run
+
+vulncheck:
+	govulncheck ./...
 
 fmt:
 	go fmt ./...

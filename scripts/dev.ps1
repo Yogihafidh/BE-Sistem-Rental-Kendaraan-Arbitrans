@@ -11,7 +11,7 @@
 
 param (
     [Parameter(Position=0, Mandatory=$true)]
-    [ValidateSet("help", "up", "down", "migrate-up", "migrate-down", "migrate-version", "sqlc-compile", "sqlc-generate", "swag", "test", "fmt", "vet", "build", "dev")]
+    [ValidateSet("help", "up", "down", "migrate-up", "migrate-down", "migrate-version", "sqlc-compile", "sqlc-generate", "swag", "test", "test-race", "lint", "vulncheck", "fmt", "vet", "build", "dev")]
     [string]$Command
 )
 
@@ -29,6 +29,9 @@ switch ($Command) {
         Write-Host "  .\scripts\dev.ps1 sqlc-generate   - Regenerate Go code with sqlc"
         Write-Host "  .\scripts\dev.ps1 swag            - Regenerate Swagger documentation"
         Write-Host "  .\scripts\dev.ps1 test            - Run all unit tests"
+        Write-Host "  .\scripts\dev.ps1 test-race       - Run unit tests with race detector"
+        Write-Host "  .\scripts\dev.ps1 lint            - Run golangci-lint (includes gosec)"
+        Write-Host "  .\scripts\dev.ps1 vulncheck       - Check dependencies with govulncheck"
         Write-Host "  .\scripts\dev.ps1 fmt             - Format Go source code"
         Write-Host "  .\scripts\dev.ps1 vet             - Run static analysis"
         Write-Host "  .\scripts\dev.ps1 dev             - Run backend with live reload (Air)"
@@ -60,6 +63,15 @@ switch ($Command) {
     }
     "test" {
         go test -v ./...
+    }
+    "test-race" {
+        go test -v -race ./...
+    }
+    "lint" {
+        golangci-lint run
+    }
+    "vulncheck" {
+        govulncheck ./...
     }
     "fmt" {
         go fmt ./...
